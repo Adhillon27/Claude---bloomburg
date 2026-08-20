@@ -5,12 +5,17 @@ import { ChartPanel } from './components/ChartPanel'
 import { NewsFeed } from './components/NewsFeed'
 import { MoversPanel } from './components/MoversPanel'
 import { HelpOverlay } from './components/HelpOverlay'
+import { AuxPanel, type AuxView } from './components/AuxPanel'
+import { AlertToastStack } from './components/AlertToastStack'
 import { useMarketData } from './data/useMarketData'
+import { useAlerts } from './data/useAlerts'
 import { parseCommand } from './data/commandParser'
 import type { Timeframe } from './data/types'
 
 type ChartMode = 'GP' | 'DES'
 type PulseTarget = 'news' | 'movers' | null
+
+const TOAST_LIFETIME_MS = 6000
 
 export default function App() {
   const { quotes, indices, news, getCandles, getProfile } = useMarketData()
@@ -19,7 +24,10 @@ export default function App() {
   const [chartMode, setChartMode] = useState<ChartMode>('GP')
   const [helpOpen, setHelpOpen] = useState(false)
   const [pulse, setPulse] = useState<PulseTarget>(null)
+  const [auxView, setAuxView] = useState<AuxView | null>(null)
   const commandBarRef = useRef<CommandBarHandle>(null)
+  const knownSymbols = quotes.map((q) => q.symbol)
+  const { alerts, addAlert, removeAlert, justTriggered, dismissToast } = useAlerts(quotes)
 
   useEffect(() => {
     if (!selectedSymbol && quotes.length) setSelectedSymbol(quotes[0].symbol)
@@ -34,12 +42,13 @@ export default function App() {
         e.preventDefault()
         commandBarRef.current?.focus()
       } else if (e.key === 'Escape') {
-        setHelpOpen(false)
+        if (helpOpen) setHelpOpen(false)
+        else if (auxView) setAuxView(null)
       }
     }
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [])
+  }, [helpOpen, auxView])
 
   useEffect(() => {
     if (!pulse) return
@@ -47,8 +56,17 @@ export default function App() {
     return () => clearTimeout(id)
   }, [pulse])
 
+  useEffect(() => {
+    if (!justTriggered.length) return
+    const timers = justTriggered.map((t) => setTimeout(() => dismissToast(t.id), TOAST_LIFETIME_MS))
+    return () => timers.forEach(clearTimeout)
+  }, [justTriggered, dismissToast])
+
+  function openAux(view: AuxView) {
+    setAuxView((current) => (current === view ? null : view))
+  }
+
   function handleExecute(raw: string) {
-    const knownSymbols = quotes.map((q) => q.symbol)
     const { symbol, code } = parseCommand(raw, knownSymbols)
 
     if (symbol) setSelectedSymbol(symbol)
@@ -69,6 +87,18 @@ export default function App() {
       case 'WEI':
         setPulse('movers')
         break
+      case 'OB':
+        openAux('OB')
+        break
+      case 'OPT':
+        openAux('OPT')
+        break
+      case 'ECO':
+        openAux('ECO')
+        break
+      case 'ALRT':
+        openAux('ALRT')
+        break
       default:
         if (symbol) setChartMode('GP')
         break
@@ -82,7 +112,7 @@ export default function App() {
   return (
     <div className="terminal-root">
       <CommandBar ref={commandBarRef} onExecute={handleExecute} activeSymbol={selectedSymbol} />
-      <div className="terminal-grid">
+      <div className={`terminal-grid ${auxView ? 'terminal-grid--aux' : ''}`}>
         <Watchlist quotes={quotes} selectedSymbol={selectedSymbol} onSelect={setSelectedSymbol} />
         <ChartPanel
           symbol={selectedSymbol}
@@ -95,8 +125,22 @@ export default function App() {
         />
         <NewsFeed news={news} onSymbolClick={setSelectedSymbol} pulse={pulse === 'news'} />
         <MoversPanel quotes={quotes} indices={indices} onSelect={setSelectedSymbol} pulse={pulse === 'movers'} />
+        {auxView && (
+          <AuxPanel
+            view={auxView}
+            onSelectView={setAuxView}
+            onClose={() => setAuxView(null)}
+            symbol={selectedSymbol}
+            quote={selectedQuote}
+            alerts={alerts}
+            onAddAlert={addAlert}
+            onRemoveAlert={removeAlert}
+            knownSymbols={knownSymbols}
+          />
+        )}
       </div>
       {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
+      <AlertToastStack toasts={justTriggered} onDismiss={dismissToast} />
     </div>
   )
 }

@@ -1,6 +1,6 @@
-export type FunctionCode = 'DES' | 'GP' | 'TOP' | 'WEI' | 'HELP'
+export type FunctionCode = 'DES' | 'GP' | 'TOP' | 'WEI' | 'HELP' | 'OB' | 'OPT' | 'ECO' | 'ALRT'
 
-const FUNCTION_CODES: FunctionCode[] = ['DES', 'GP', 'TOP', 'WEI', 'HELP']
+const FUNCTION_CODES: FunctionCode[] = ['DES', 'GP', 'TOP', 'WEI', 'HELP', 'OB', 'OPT', 'ECO', 'ALRT']
 
 export interface ParsedCommand {
   symbol?: string
